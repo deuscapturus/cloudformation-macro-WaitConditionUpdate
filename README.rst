@@ -1,7 +1,7 @@
 Cloudformation WaitCondition Update Macro
 =========================================
 
-The Cloudformation resources AWS::Cloudformation::WaitCondition and AWS::Cloudformation::WaitConditionHandle cannot currently be updated or recreated.  To wait for resource signaling during a *stack update* a new WaitCondition resource needs to be created.  This macro will create new WaitCondition resources based on changes to specified resources.
+The Cloudformation resources AWS::Cloudformation::WaitCondition and AWS::Cloudformation::WaitConditionHandle cannot currently be updated or recreated.  To wait for resource signaling during a *stack update* a new WaitCondition resource needs to be created.  This macro will create new WaitCondition resources based on changes to specified parameters.
 
 
 Testing

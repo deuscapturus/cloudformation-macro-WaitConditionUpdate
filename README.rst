@@ -59,3 +59,10 @@ When the parameters of WaitConditionUpdateParameters change the logical ids of a
          resource when changed.
        Type: CommaDelimitedList
        Default: "PutDefaultsHere"
+
+Example
+^^^^^^^
+
+Use a WaitCondition to get a signal when tasks are healthy in a ECS Service
+
+.. _example-ecs-service.yaml:

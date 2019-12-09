@@ -1,0 +1,192 @@
+Transform: ['WaitConditionUpdate']
+Description: Deploy a container to ECS Fargate
+Parameters:
+  WaitConditionUpdateParameters:
+    Description: Used by the WaitConditionUpdate transform macro to determine which
+      parameter values will be used for naming any WaitCondition resources.  The 
+      parameters must only be those which will trigger a recreation of the signaling
+      resource when changed.
+    Type: CommaDelimitedList
+    Default: "ContainerImage"
+  Name:
+    Description: The application name. Lowercase letters, numbers and dashes only.  No spaces.
+    Type: String
+    AllowedPattern: '[a-z\-1-9]*'
+    ConstraintDescription: Must be uppercase letters, numbers and dashes only. No spaces.
+  ContainerImage:
+    Type: String
+    Description: The Container Image to Run.  Example; registry.hub.docker.com/deuscapturus/helloworld-http-envs:latest
+  Port:
+    Type: Number
+    Default: 80
+    Description: The port the application listens on
+  CPUs:
+    Type: String
+    Default: '256'
+    Description: The number of cpu units used by the task
+    AllowedValues:
+      - '256'
+      - '512'
+      - '1024'
+      - '2048'
+      - '4096'
+  Memory:
+    Type: String
+    Default: '512'
+    Description: The amount of memory to assign to the task
+    AllowedValues:
+      - '512'
+      - '1024'
+      - '2048'
+      - '4096'
+      - '8192'
+      - '16384'
+  DesiredCount:
+    Type: Number
+    Default: 1
+  HealthCheckPath:
+    Description: Path to the http health check endpoint. Example '/health-check'
+    Type: String
+    Default: ''
+    AllowedPattern: ^\/\S*|^$
+    ConstraintDescription: 'Must be no spaces starting with a forward slash.  Example:
+      /health-check'
+  SchedulingStrategy:
+    Type: String
+    Default: REPLICA
+    Description: The scheduling strategy to use for the service. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html
+    AllowedValues:
+      - DAEMON
+      - REPLICA
+  SecurityGroups:
+    Description: VPC security groups
+    Type: CommaDelimitedList
+  Subnets:
+    Description: VPC subnets
+    Type: CommaDelimitedList
+  TargetGroup:
+    Type: String
+    Default: ''
+    Description: The ELBv2 target group to register tasks with
+Conditions:
+  TargetGroup: !Not [!Equals ['', !Ref 'TargetGroup']]
+  HealthCheck: !Not [!Equals ['', !Ref 'HealthCheckPath']]
+Resources:
+  TaskLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Sub
+        - '/${Name}-${STACKID}'
+        - STACKID: !Select
+          - 2
+          - !Split
+            - '/'
+            - !Ref 'AWS::StackId'
+  TaskRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+
+      Family: !Sub
+        - '${Name}-${STACKID}'
+        - STACKID: !Select
+          - 2
+          - !Split
+            - '/'
+            - !Ref 'AWS::StackId'
+      ContainerDefinitions:
+        - 
+          Image: !Ref 'ContainerImage'
+          HealthCheck:
+            Fn::If:
+              - HealthCheck
+              - Command:
+                - 'CMD-SHELL'
+                - !Sub 'curl -fsS http://localhost:${Port}${HealthCheckPath} > /dev/null'
+              - !Ref 'AWS::NoValue'
+          LogConfiguration: 
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref 'TaskLogGroup'
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: !Ref 'Name'
+          Name: !Ref 'Name'
+          PortMappings:
+            -
+              ContainerPort: !Ref 'Port'
+              HostPort: !Ref 'Port'
+              Protocol: tcp
+        -
+          Name: CloudFormationAwaitReply
+          Image: curlimages/curl:7.67.0
+          Command:
+            - curl
+            - '-XPUT'
+            - -H
+            - 'Content-Type:'
+            - --data-binary
+            - '{"Status" : "SUCCESS","Reason" : "Configuration Complete","UniqueId" : "ID1234","Data" : "Application has completed configuration."}'
+            - !Ref 'ServiceWaitHandle'
+          DependsOn:
+            -
+              Condition: !If [HealthCheck, 'HEALTHY', 'START']
+              ContainerName: !Ref 'Name'
+          Essential: false
+      Cpu: !Ref 'CPUs'
+      ExecutionRoleArn: !Ref 'TaskRole'
+      Memory: !Ref 'Memory'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !Ref 'TaskRole'
+  ServiceWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  ServiceWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    Properties:
+      Handle: !Ref ServiceWaitHandle
+      Timeout: '300'
+      Count: !Ref 'DesiredCount'
+  TaskService:
+    Type: AWS::ECS::Service
+    Properties: 
+      Cluster: default
+      DesiredCount: !Ref 'DesiredCount'
+      LaunchType: FARGATE
+      NetworkConfiguration: 
+        AwsvpcConfiguration: 
+          AssignPublicIp: DISABLED
+          SecurityGroups: !Ref 'SecurityGroups'
+          Subnets: !Ref 'Subnets'
+      SchedulingStrategy: !Ref 'SchedulingStrategy'
+      LoadBalancers: 
+        Fn::If:
+          - TargetGroup
+          - 
+            - ContainerName: !Ref 'Name'
+              ContainerPort: !Ref Port
+              TargetGroupArn: !Ref TargetGroup
+          - !Ref 'AWS::NoValue'
+      TaskDefinition: !Ref 'TaskDefinition'
+Outputs:      
+  TaskService:
+    Description: Logical ID of the ECS Task Service
+    Value: !Ref 'TaskService'
+  TaskDefinition:
+    Description: Logical ID of the ECS Task Definition
+    Value: !Ref 'TaskDefinition'

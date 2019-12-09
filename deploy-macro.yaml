@@ -1,0 +1,33 @@
+Resources:
+  LambdaExecutionRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: root
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: arn:aws:logs:*:*:*
+      Roles:
+      - Ref: LambdaExecutionRole
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: main.handler
+      Code: build
+      Runtime: python3.6
+      Timeout: '10'
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+  CFWaitConditionUpdateMacro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Description: "Upate the WaitConditionHandle and WaitCondition resource logical ids with appended hash based on parameters to allow for WaitConditions on stack updates"
+      FunctionName: !GetAtt Lambda.Arn
+      Name: WaitConditionUpdate

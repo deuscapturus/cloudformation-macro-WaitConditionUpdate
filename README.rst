@@ -65,4 +65,4 @@ Example
 
 Use a WaitCondition to get a signal when tasks are healthy in a ECS Service
 
-.. _example-ecs-service.yaml:
+`example-ecs-service.yaml <example-ecs-service.yaml>`_

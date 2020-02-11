@@ -135,13 +135,10 @@ Resources:
           Name: CloudFormationAwaitReply
           Image: curlimages/curl:7.67.0
           Command:
-            - curl
-            - '-XPUT'
-            - -H
-            - 'Content-Type:'
-            - --data-binary
-            - '{"Status" : "SUCCESS","Reason" : "Configuration Complete","UniqueId" : "ID1234","Data" : "Application has completed configuration."}'
-            - !Ref 'ServiceWaitHandle'
+            - sh
+            - -c
+            - Fn::Sub: |
+                  DOCKERID=$(curl $ECS_CONTAINER_METADATA_URI  | grep -o '"DockerId": *"[^"]*' | grep -o '[^"]*$'); curl -v -XPUT --trace-ascii -H 'Content-Type:' --data-binary "{\"Status\" : \"SUCCESS\",\"Reason\" : \"Configuration Complete\",\"UniqueId\" : \"$DOCKERID\",\"Data\" : \"Application has completed configuration.\"}" '${ServiceWaitHandle}'
           DependsOn:
             -
               Condition: !If [HealthCheck, 'HEALTHY', 'START']
